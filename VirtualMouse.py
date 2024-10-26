@@ -7,6 +7,22 @@ from ctypes import cast, POINTER
 from comtypes import CLSCTX_ALL
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 
+# -----------------------------------------------------------
+# Explanation:
+# This script uses OpenCV, MediaPipe, and PyAutoGUI to enable 
+# gesture-based control of the mouse and system volume. It 
+# captures video from the webcam, detects hand landmarks using 
+# MediaPipe, interprets specific hand gestures to perform 
+# actions like moving the cursor, left-click, right-click, 
+# dragging, and volume control. Pycaw is used to manage 
+# system volume, allowing for volume adjustments via thumb 
+# and index finger gestures.
+# 
+# OpenCV handles video input/output, 
+# MediaPipe detects hand landmarks, and 
+# PyAutoGUI maps gestures to mouse actions. 
+# -----------------------------------------------------------
+
 # Setting up MediaPipe for hand detection
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(max_num_hands=1)
@@ -31,22 +47,36 @@ devices = AudioUtilities.GetSpeakers()
 interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
 volume = cast(interface, POINTER(IAudioEndpointVolume))
 
-# Function to calculate the position of the cursor based on hand position
+# -----------------------------------------------------------
+# Function: get_cursor_position
+# Description:
+# This function calculates the on-screen cursor position 
+# based on the coordinates of the detected hand landmark.
+# It maps the webcam's frame dimensions to the screen 
+# resolution to ensure smooth cursor movement.
+# -----------------------------------------------------------
 def get_cursor_position(landmark, frame_width, frame_height):
     x, y = int(landmark.x * frame_width), int(landmark.y * frame_height)
     screen_x = np.clip(np.interp(x, (0, frame_width), (0, screen_width)), 0, screen_width - 1)
     screen_y = np.clip(np.interp(y, (0, frame_height), (0, screen_height)), 0, screen_height - 1)
     return screen_x, screen_y
 
-# Function to detect specific gestures
+# -----------------------------------------------------------
+# Function: detect_gesture
+# Description:
+# This function determines which fingers are extended or 
+# folded based on the hand landmarks detected by MediaPipe.
+# It returns an array indicating the state of each finger, 
+# which is then used to identify specific gestures.
+# -----------------------------------------------------------
 def detect_gesture(hand_landmarks):
     fingers = []
-    # Thumb
+    # Thumb detection
     if hand_landmarks[4].x < hand_landmarks[3].x:
         fingers.append(1)
     else:
         fingers.append(0)
-    # Other fingers
+    # Other fingers detection
     for id in range(8, 21, 4):
         if hand_landmarks[id].y < hand_landmarks[id - 2].y:
             fingers.append(1)
@@ -72,7 +102,15 @@ while cap.isOpened():
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     result = hands.process(rgb_frame)
 
-    # Check if any hand landmarks are detected
+    # -----------------------------------------------------------
+    # Processing and Recognizing Gestures:
+    # If hand landmarks are detected, the script identifies 
+    # different gestures based on the positions of the fingers 
+    # and executes actions like clicking, dragging, volume 
+    # control, and cursor movement. It ensures smooth and 
+    # responsive interactions by checking gesture changes and 
+    # adding delays to prevent multiple triggers.
+    # -----------------------------------------------------------
     if result.multi_hand_landmarks:
         for hand_landmarks in result.multi_hand_landmarks:
             # Draw landmarks on the hand
