@@ -105,6 +105,17 @@ while cap.isOpened():
                 # Multiple Select: Fist Gesture (All Fingers Down)
                 gesture_type = "multiple_select"
 
+            # Drag-and-Drop: V Gesture with Index and Middle Bent to Start Drag
+            # And V Gesture with Both Straight Up to Drop
+            elif (fingers == [0, 1, 1, 0, 0] and 
+                  landmarks[8].y > landmarks[6].y and landmarks[12].y > landmarks[10].y):
+                # Both index and middle bent down
+                gesture_type = "drag_and_drop_start"
+            elif (fingers == [0, 1, 1, 0, 0] and 
+                  landmarks[8].y < landmarks[6].y and landmarks[12].y < landmarks[10].y):
+                # Both index and middle straight up
+                gesture_type = "drag_and_drop_end"
+
             # Volume Control: Thumb and Index (Close decreases, Far increases)
             elif abs(landmarks[4].x - landmarks[8].x) < 0.05:
                 gesture_type = "volume_control_decrease"
@@ -132,7 +143,7 @@ while cap.isOpened():
 
                 else:
                     # Hold time for the gestures
-                    hold_time = click_cooldown if gesture_type in ["right_click", "multiple_select"] else gesture_hold_threshold
+                    hold_time = click_cooldown if gesture_type in ["right_click", "multiple_select", "drag_and_drop_start"] else gesture_hold_threshold
 
                     if time.time() - gesture_start_time > hold_time:
                         if gesture_type == "neutral":
@@ -169,6 +180,20 @@ while cap.isOpened():
                                 pyautogui.mouseDown()
                                 drag_active = True
                             elif drag_active and fingers == [1, 1, 1, 1, 1]:
+                                pyautogui.mouseUp()
+                                drag_active = False
+
+                        elif gesture_type == "drag_and_drop_start":
+                            # Start drag when V gesture is bent down
+                            cursor_x, cursor_y = get_cursor_position(landmarks[8], frame_width, frame_height)
+                            pyautogui.moveTo(cursor_x, cursor_y)
+                            if not drag_active:
+                                pyautogui.mouseDown()
+                                drag_active = True
+
+                        elif gesture_type == "drag_and_drop_end":
+                            # Drop the dragged item when V gesture is straight up
+                            if drag_active:
                                 pyautogui.mouseUp()
                                 drag_active = False
 
