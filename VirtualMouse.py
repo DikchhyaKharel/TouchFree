@@ -3,6 +3,9 @@ import mediapipe as mp
 import pyautogui
 import numpy as np
 import time
+from ctypes import cast, POINTER
+from comtypes import CLSCTX_ALL
+from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 
 # Setting up MediaPipe for hand detection
 mp_hands = mp.solutions.hands
@@ -12,13 +15,21 @@ mp_drawing = mp.solutions.drawing_utils
 # Initialize screen dimensions for cursor control
 screen_width, screen_height = pyautogui.size()
 
-# Track last double-click and right-click times to prevent multiple triggers
+# Track last click times to prevent multiple triggers
 last_double_click_time = 0
 last_right_click_time = 0
+last_left_click_time = 0
 gesture_start_time = None  # To track how long a gesture has been held
 gesture_hold_threshold = 1.0  # Time in seconds to hold most gestures
-right_click_hold_threshold = 0.5  # Right-click hold threshold
-right_click_cooldown = 1.0  # Cooldown for right-click in seconds
+click_cooldown = 0.3  # Cooldown for clicks in seconds
+right_click_delay = 0.5  # Delay after right click to prevent multiple triggers
+drag_active = False  # To track if drag-and-drop is active
+multiple_select_active = False  # To track if multiple selection is active
+
+# Initialize Pycaw for volume control
+devices = AudioUtilities.GetSpeakers()
+interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+volume = cast(interface, POINTER(IAudioEndpointVolume))
 
 # Function to calculate the position of the cursor based on hand position
 def get_cursor_position(landmark, frame_width, frame_height):
@@ -46,7 +57,6 @@ def detect_gesture(hand_landmarks):
 # Main code to start video capture and gesture control
 cap = cv2.VideoCapture(0)
 pTime = 0
-drag_active = False  # To track if drag mode is active
 current_gesture = None  # To track the ongoing gesture
 
 while cap.isOpened():
@@ -77,33 +87,29 @@ while cap.isOpened():
             # Identify gesture type and perform corresponding mouse action
             if fingers == [1, 1, 1, 1, 1]:
                 # Neutral Position: Open Palm (all fingers up)
-                # Releases drag if it was active
                 gesture_type = "neutral"
 
             elif fingers == [0, 1, 0, 0, 0]:
                 # Cursor Movement: Index Finger Up, Other Fingers Down
-                # Moves the cursor based on the index finger's position
                 gesture_type = "move_cursor"
-
-            elif fingers == [0, 1, 1, 0, 0] and not drag_active:
+            
+            elif fingers == [0, 1, 1, 0, 0]:
                 # Left Click: Index and Middle Fingers Up, Other Fingers Down
-                # Simulates a left-click
                 gesture_type = "left_click"
 
-            elif abs(landmarks[4].x - landmarks[8].x) < 0.05:
-                # Right Click: Thumb and Index Close Together
-                # Simulates a right-click with a cooldown
+            elif fingers == [0, 0, 0, 0, 1]:
+                # Right Click: Pinky Up, All Other Fingers Down
                 gesture_type = "right_click"
 
-            elif fingers == [1, 0, 0, 0, 0]:
-                # Drag and Drop: Only Thumb Up, All Other Fingers Down
-                # Initiates drag mode by holding down the mouse button
-                gesture_type = "drag_and_drop"
+            elif fingers == [0, 0, 0, 0, 0]:
+                # Multiple Select: Fist Gesture (All Fingers Down)
+                gesture_type = "multiple_select"
 
-            elif abs(landmarks[4].x - landmarks[20].x) < 0.05:
-                # Double Click: Thumb and Pinky Together
-                # Simulates a double-click with a cooldown to prevent multiple triggers
-                gesture_type = "double_click"
+            # Volume Control: Thumb and Index (Close decreases, Far increases)
+            elif abs(landmarks[4].x - landmarks[8].x) < 0.05:
+                gesture_type = "volume_control_decrease"
+            elif abs(landmarks[4].x - landmarks[8].x) > 0.1:
+                gesture_type = "volume_control_increase"
 
             else:
                 gesture_type = None
@@ -115,44 +121,56 @@ while cap.isOpened():
 
             # If gesture is held long enough, execute action
             if gesture_type:
-                hold_time = right_click_hold_threshold if gesture_type == "right_click" else gesture_hold_threshold
+                # Handle Volume Control immediately
+                if gesture_type == "volume_control_decrease":
+                    current_volume = volume.GetMasterVolumeLevelScalar()
+                    volume.SetMasterVolumeLevelScalar(max(current_volume - 0.02, 0.0), None)
 
-                # If gesture is held long enough, perform the action
-                if time.time() - gesture_start_time > hold_time:
-                    if gesture_type == "neutral":
-                        # Release drag if it was active
-                        if drag_active:
-                            pyautogui.mouseUp()
-                            drag_active = False
+                elif gesture_type == "volume_control_increase":
+                    current_volume = volume.GetMasterVolumeLevelScalar()
+                    volume.SetMasterVolumeLevelScalar(min(current_volume + 0.02, 1.0), None)
 
-                    elif gesture_type == "move_cursor":
-                        # Move the cursor based on the index finger's position
-                        cursor_x, cursor_y = get_cursor_position(landmarks[8], frame_width, frame_height)
-                        pyautogui.moveTo(cursor_x, cursor_y)
+                else:
+                    # Hold time for the gestures
+                    hold_time = click_cooldown if gesture_type in ["right_click", "multiple_select"] else gesture_hold_threshold
 
-                    elif gesture_type == "left_click":
-                        # Perform a left-click
-                        pyautogui.click()
+                    if time.time() - gesture_start_time > hold_time:
+                        if gesture_type == "neutral":
+                            # Release any active actions
+                            if drag_active:
+                                pyautogui.mouseUp()
+                                drag_active = False
+                            if multiple_select_active:
+                                pyautogui.mouseUp()
+                                multiple_select_active = False
 
-                    elif gesture_type == "right_click":
-                        current_time = time.time()
-                        # Check cooldown for right-click to prevent multiple triggers
-                        if current_time - last_right_click_time > right_click_cooldown:
-                            pyautogui.click(button='right')
-                            last_right_click_time = current_time
+                        elif gesture_type == "move_cursor":
+                            # Move the cursor based on the index finger's position
+                            cursor_x, cursor_y = get_cursor_position(landmarks[8], frame_width, frame_height)
+                            pyautogui.moveTo(cursor_x, cursor_y)
 
-                    elif gesture_type == "drag_and_drop":
-                        # Initiate drag mode by holding down the mouse button
-                        if not drag_active:
-                            pyautogui.mouseDown()
-                            drag_active = True
+                        elif gesture_type == "left_click":
+                            current_time = time.time()
+                            if current_time - last_left_click_time > click_cooldown:
+                                pyautogui.click()
+                                last_left_click_time = current_time
 
-                    elif gesture_type == "double_click":
-                        current_time = time.time()
-                        # Prevent multiple double-clicks by adding a cooldown
-                        if current_time - last_double_click_time > 0.5:
-                            pyautogui.doubleClick()
-                            last_double_click_time = current_time
+                        elif gesture_type == "right_click":
+                            current_time = time.time()
+                            if current_time - last_right_click_time > right_click_delay:
+                                pyautogui.click(button='right')
+                                last_right_click_time = current_time
+
+                        elif gesture_type == "multiple_select":
+                            # Start selecting when you make a fist and the cursor moves with your hand and release when done selecting items  
+                            cursor_x, cursor_y = get_cursor_position(landmarks[8], frame_width, frame_height)
+                            pyautogui.moveTo(cursor_x, cursor_y)
+                            if not drag_active:
+                                pyautogui.mouseDown()
+                                drag_active = True
+                            elif drag_active and fingers == [1, 1, 1, 1, 1]:
+                                pyautogui.mouseUp()
+                                drag_active = False
 
     # Display FPS
     cTime = time.time()
