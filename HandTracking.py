@@ -40,7 +40,7 @@ class handDetector():
                        
                         lmList.append([id,cx,cy])
                         if draw:
-                            cv2.circle(img, (cx,cy),10,(100,0,0),cv2.FILLED)
+                            cv2.circle(img, (cx,cy),15,(255,0,0),cv2.FILLED)
         return lmList
 
 def main():
@@ -55,7 +55,7 @@ def main():
         img = detector.findHands(img) #gets the hand 
         lmList = detector.findPos(img)
         if len(lmList) !=0:
-            print(lmList[8])
+            print(lmList[4])
 
         cTime = time.time()
         fps = 1 / (cTime - pTime)
