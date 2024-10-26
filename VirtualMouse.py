@@ -157,7 +157,7 @@ while cap.isOpened():
             # Volume Control: Thumb and Index (Close decreases, Far increases)
             elif abs(landmarks[4].x - landmarks[8].x) < 0.05:
                 gesture_type = "volume_control_decrease"
-            elif abs(landmarks[4].x - landmarks[8].x) > 0.1:
+            elif abs(landmarks[4].x - landmarks[8].x) > 0.05:
                 gesture_type = "volume_control_increase"
 
             else:
