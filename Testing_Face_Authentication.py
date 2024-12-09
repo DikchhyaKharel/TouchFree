@@ -2,6 +2,8 @@ import os
 import cv2
 import numpy as np
 import subprocess  # Import subprocess module to run external scripts
+from virtual_keyboard import keyboard
+from VirtualMouse import mouse
 
 # Label dictionary mapping IDs to names
 label = {'Dikchhya': 0, 'Roshan': 1, 'Swasthik': 2, 'Nischal': 3}
@@ -11,13 +13,8 @@ label_name = {v: k for k, v in label.items()}
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
 def recognize_faces():
-    # Load the trained model
-    if not os.path.exists('trained_model.xml'):
-        print("Error: Trained model file not found! Please train the model first.")
-        return
-
     recognizer = cv2.face.LBPHFaceRecognizer_create()
-    recognizer.read('trained_model.xml')
+    recognizer.read("C:/touchFree/TouchFree/trained_model.xml")
 
     # Open the camera
     cap = cv2.VideoCapture(0)
@@ -57,15 +54,15 @@ def recognize_faces():
 
                 if key == ord('k'):
                     print("Virtual Keyboard selected.")
-                    subprocess.Popen(['python', 'virtual_keyboard.py'])  # Run virtual_keyboard.py
                     cap.release()  # Release camera and stop the face recognition loop
                     cv2.destroyAllWindows()  # Close the OpenCV window
+                    keyboard()
                     break  # Exit after selection
                 elif key == ord('m'):
                     print("Virtual Mouse selected.")
-                    subprocess.Popen(['python', 'virtualMouse.py'])  # Run virtualMouse.py
                     cap.release()  # Release camera and stop the face recognition loop
                     cv2.destroyAllWindows()  # Close the OpenCV window
+                    mouse()
                     break  # Exit after selection
 
             else:
